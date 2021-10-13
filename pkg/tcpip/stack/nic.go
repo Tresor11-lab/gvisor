@@ -316,6 +316,9 @@ func (n *nic) IsLoopback() bool {
 
 // WritePacket implements NetworkLinkEndpoint.
 func (n *nic) WritePacket(r *Route, protocol tcpip.NetworkProtocolNumber, pkt *PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	_, err := n.enqueuePacketBuffer(r, protocol, pkt)
 	return err
 }
@@ -365,6 +368,9 @@ func (n *nic) enqueuePacketBuffer(r *Route, protocol tcpip.NetworkProtocolNumber
 
 // WritePacketToRemote implements NetworkInterface.
 func (n *nic) WritePacketToRemote(remoteLinkAddr tcpip.LinkAddress, protocol tcpip.NetworkProtocolNumber, pkt *PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	var r RouteInfo
 	r.NetProto = protocol
 	r.RemoteLinkAddress = remoteLinkAddr
@@ -390,6 +396,9 @@ func (n *nic) writePacket(r RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt
 
 // WritePackets implements NetworkLinkEndpoint.
 func (n *nic) WritePackets(r *Route, pkts PacketBufferList, protocol tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	return n.enqueuePacketBuffer(r, protocol, &pkts)
 }
 
@@ -714,6 +723,9 @@ func (n *nic) isInGroup(addr tcpip.Address) bool {
 // This rule applies only to the slice itself, not to the items of the slice;
 // the ownership of the items is not retained by the caller.
 func (n *nic) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcpip.NetworkProtocolNumber, pkt *PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	enabled := n.Enabled()
 	// If the NIC is not yet enabled, don't receive any packets.
 	if !enabled {
@@ -754,6 +766,7 @@ func (n *nic) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcp
 			packetEPPkt = NewPacketBuffer(PacketBufferOptions{
 				Data: PayloadSince(pkt.LinkHeader()).ToVectorisedView(),
 			})
+			defer packetEPPkt.DecRef()
 			// If a link header was populated in the original packet buffer, then
 			// populate it in the packet buffer we provide to packet endpoints as
 			// packet endpoints inspect link headers.
@@ -761,7 +774,9 @@ func (n *nic) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcp
 			packetEPPkt.PktType = tcpip.PacketHost
 		}
 
-		ep.HandlePacket(n.id, local, protocol, packetEPPkt.Clone())
+		clone := packetEPPkt.Clone()
+		defer clone.DecRef()
+		ep.HandlePacket(n.id, local, protocol, clone)
 	}
 
 	n.packetEPs.mu.Lock()
@@ -811,20 +826,25 @@ func (n *nic) deliverOutboundPacket(remote tcpip.LinkAddress, pkt *PacketBuffer)
 				ReserveHeaderBytes: pkt.AvailableHeaderBytes(),
 				Data:               PayloadSince(pkt.NetworkHeader()).ToVectorisedView(),
 			})
+			defer packetEPPkt.DecRef()
 			// Add the link layer header as outgoing packets are intercepted before
 			// the link layer header is created and packet endpoints are interested
 			// in the link header.
 			n.LinkEndpoint.AddHeader(local, remote, pkt.NetworkProtocolNumber, packetEPPkt)
 			packetEPPkt.PktType = tcpip.PacketOutgoing
 		}
-
-		ep.HandlePacket(n.id, local, pkt.NetworkProtocolNumber, packetEPPkt.Clone())
+		clone := packetEPPkt.Clone()
+		defer clone.DecRef()
+		ep.HandlePacket(n.id, local, pkt.NetworkProtocolNumber, clone)
 	})
 }
 
 // DeliverTransportPacket delivers the packets to the appropriate transport
 // protocol endpoint.
 func (n *nic) DeliverTransportPacket(protocol tcpip.TransportProtocolNumber, pkt *PacketBuffer) TransportPacketDisposition {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	state, ok := n.stack.transportProtocols[protocol]
 	if !ok {
 		n.stats.unknownL4ProtocolRcvdPacketCounts.Increment(uint64(protocol))
@@ -885,6 +905,9 @@ func (n *nic) DeliverTransportPacket(protocol tcpip.TransportProtocolNumber, pkt
 
 // DeliverTransportError implements TransportDispatcher.
 func (n *nic) DeliverTransportError(local, remote tcpip.Address, net tcpip.NetworkProtocolNumber, trans tcpip.TransportProtocolNumber, transErr TransportError, pkt *PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	state, ok := n.stack.transportProtocols[trans]
 	if !ok {
 		return
@@ -913,6 +936,8 @@ func (n *nic) DeliverTransportError(local, remote tcpip.Address, net tcpip.Netwo
 
 // DeliverRawPacket implements TransportDispatcher.
 func (n *nic) DeliverRawPacket(protocol tcpip.TransportProtocolNumber, pkt *PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
 	// For ICMPv4 only we validate the header length for compatibility with
 	// raw(7) ICMP_FILTER. The same check is made in Linux here:
 	// https://github.com/torvalds/linux/blob/70585216/net/ipv4/raw.c#L189.

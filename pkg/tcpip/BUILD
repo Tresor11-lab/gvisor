@@ -55,6 +55,8 @@ deps_test(
         "//pkg/state/wire",
         "//pkg/sync",
         "//pkg/waiter",
+        "//pkg/refsvfs2",
+        "//pkg/refs",
 
         # Other deps.
         "@com_github_google_btree//:go_default_library",

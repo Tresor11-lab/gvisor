@@ -155,6 +155,9 @@ func (*endpoint) WriteHeaderIncludedPacket(*stack.Route, *stack.PacketBuffer) tc
 }
 
 func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	stats := e.stats.arp
 	stats.packetsReceived.Increment()
 
@@ -198,6 +201,7 @@ func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
 		respPkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			ReserveHeaderBytes: int(e.nic.MaxHeaderLength()) + header.ARPSize,
 		})
+		defer respPkt.DecRef()
 		packet := header.ARP(respPkt.NetworkHeader().Push(header.ARPSize))
 		respPkt.NetworkProtocolNumber = ProtocolNumber
 		packet.SetIPv4OverEthernet()
@@ -339,6 +343,7 @@ func (e *endpoint) sendARPRequest(localAddr, targetAddr tcpip.Address, remoteLin
 	pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 		ReserveHeaderBytes: int(e.MaxHeaderLength()),
 	})
+	defer pkt.DecRef()
 	h := header.ARP(pkt.NetworkHeader().Push(header.ARPSize))
 	pkt.NetworkProtocolNumber = ProtocolNumber
 	h.SetIPv4OverEthernet()

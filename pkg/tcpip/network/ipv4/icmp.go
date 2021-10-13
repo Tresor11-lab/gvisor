@@ -320,6 +320,7 @@ func (e *endpoint) handleICMP(pkt *stack.PacketBuffer) {
 			ReserveHeaderBytes: int(r.MaxHeaderLength()),
 			Data:               replyVV,
 		})
+		defer replyPkt.DecRef()
 		replyPkt.TransportProtocolNumber = header.ICMPv4ProtocolNumber
 
 		if err := r.WriteHeaderIncludedPacket(replyPkt); err != nil {
@@ -667,6 +668,7 @@ func (p *protocol) returnError(reason icmpReason, pkt *stack.PacketBuffer) tcpip
 		ReserveHeaderBytes: int(route.MaxHeaderLength()) + header.ICMPv4MinimumSize,
 		Data:               payload,
 	})
+	defer icmpPkt.DecRef()
 
 	icmpPkt.TransportProtocolNumber = header.ICMPv4ProtocolNumber
 

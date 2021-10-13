@@ -152,6 +152,14 @@ func (f *packetsPendingLinkResolution) enqueue(r *Route, proto tcpip.NetworkProt
 		proto:     proto,
 		pkt:       pkt,
 	})
+	switch pkt := pkt.(type) {
+	case *PacketBuffer:
+		pkt.IncRef()
+	case *PacketBufferList:
+		for pb := pkt.Front(); pb != nil; pb = pb.Next() {
+			pb.IncRef()
+		}
+	}
 
 	if len(packets) > maxPendingPacketsPerResolution {
 		f.incrementOutgoingPacketErrors(packets[0].proto, packets[0].pkt)
@@ -225,6 +233,12 @@ func (f *packetsPendingLinkResolution) dequeuePackets(packets []pendingPacket, l
 					panic(fmt.Sprintf("unrecognized pending packet buffer type = %T", p.pkt))
 				}
 			}
+		}
+		switch pkt := p.pkt.(type) {
+		case *PacketBuffer:
+			pkt.DecRef()
+		case *PacketBufferList:
+			pkt.DecRef()
 		}
 	}
 }

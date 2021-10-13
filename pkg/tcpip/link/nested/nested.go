@@ -52,6 +52,9 @@ func (e *Endpoint) Init(child stack.LinkEndpoint, embedder stack.NetworkDispatch
 
 // DeliverNetworkPacket implements stack.NetworkDispatcher.
 func (e *Endpoint) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	e.mu.RLock()
 	d := e.dispatcher
 	e.mu.RUnlock()
@@ -104,6 +107,9 @@ func (e *Endpoint) LinkAddress() tcpip.LinkAddress {
 
 // WritePacket implements stack.LinkEndpoint.
 func (e *Endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	return e.child.WritePacket(r, protocol, pkt)
 }
 
@@ -145,5 +151,8 @@ func (e *Endpoint) AddHeader(local, remote tcpip.LinkAddress, protocol tcpip.Net
 
 // WriteRawPacket implements stack.LinkEndpoint.
 func (e *Endpoint) WriteRawPacket(pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	return e.child.WriteRawPacket(pkt)
 }

@@ -51,6 +51,9 @@ func New(lower stack.LinkEndpoint) *Endpoint {
 // and only forwards to the actual dispatcher if Wait or WaitDispatch haven't
 // been called.
 func (e *Endpoint) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if !e.dispatchGate.Enter() {
 		return
 	}
@@ -100,6 +103,9 @@ func (e *Endpoint) LinkAddress() tcpip.LinkAddress {
 // higher-level protocols to write packets. It only forwards packets to the
 // lower endpoint if Wait or WaitWrite haven't been called.
 func (e *Endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if !e.writeGate.Enter() {
 		return nil
 	}
@@ -113,6 +119,9 @@ func (e *Endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocol
 // higher-level protocols to write packets. It only forwards packets to the
 // lower endpoint if Wait or WaitWrite haven't been called.
 func (e *Endpoint) WritePackets(r stack.RouteInfo, pkts stack.PacketBufferList, protocol tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	if !e.writeGate.Enter() {
 		return pkts.Len(), nil
 	}

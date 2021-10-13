@@ -281,6 +281,9 @@ func (*endpoint) DuplicateAddressProtocol() tcpip.NetworkProtocolNumber {
 
 // HandleLinkResolutionFailure implements stack.LinkResolvableNetworkEndpoint.
 func (e *endpoint) HandleLinkResolutionFailure(pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	// If we are operating as a router, we should return an ICMP error to the
 	// original packet's sender.
 	if pkt.NetworkPacketInfo.IsForwardedPacket {
@@ -296,6 +299,7 @@ func (e *endpoint) HandleLinkResolutionFailure(pkt *stack.PacketBuffer) {
 	pkt = stack.NewPacketBuffer(stack.PacketBufferOptions{
 		Data: buffer.NewVectorisedView(pkt.Size(), pkt.Views()),
 	})
+	defer pkt.DecRef()
 	pkt.NICID = e.nic.ID()
 	pkt.NetworkProtocolNumber = ProtocolNumber
 	e.handleControl(&icmpv6DestinationAddressUnreachableSockError{}, pkt)
@@ -741,6 +745,9 @@ func (e *endpoint) handleFragments(r *stack.Route, networkMTU uint32, pkt *stack
 
 // WritePacket writes a packet to the given destination address and protocol.
 func (e *endpoint) WritePacket(r *stack.Route, params stack.NetworkHeaderParams, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if err := addIPHeader(r.LocalAddress(), r.RemoteAddress(), pkt, params, nil /* extensionHeaders */); err != nil {
 		return err
 	}
@@ -809,6 +816,8 @@ func (e *endpoint) writePacket(r *stack.Route, pkt *stack.PacketBuffer, protocol
 			return &tcpip.ErrMessageTooLong{}
 		}
 		sent, remain, err := e.handleFragments(r, networkMTU, pkt, protocol, func(fragPkt *stack.PacketBuffer) tcpip.Error {
+			fragPkt.IncRef()
+			defer fragPkt.DecRef()
 			// TODO(gvisor.dev/issue/3884): Evaluate whether we want to send each
 			// fragment one by one using WritePacket() (current strategy) or if we
 			// want to create a PacketBufferList from the fragments and feed it to
@@ -831,6 +840,9 @@ func (e *endpoint) writePacket(r *stack.Route, pkt *stack.PacketBuffer, protocol
 
 // WritePackets implements stack.NetworkEndpoint.
 func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, params stack.NetworkHeaderParams) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	if r.Loop()&stack.PacketLoop != 0 {
 		panic("not implemented")
 	}
@@ -855,6 +867,7 @@ func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, par
 			// removed once the fragmentation is done.
 			originalPkt := pb
 			if _, _, err := e.handleFragments(r, networkMTU, pb, params.Protocol, func(fragPkt *stack.PacketBuffer) tcpip.Error {
+				fragPkt.IncRef()
 				// Modify the packet list in place with the new fragments.
 				pkts.InsertAfter(pb, fragPkt)
 				pb = fragPkt
@@ -915,6 +928,9 @@ func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, par
 
 // WriteHeaderIncludedPacket implements stack.NetworkEndpoint.
 func (e *endpoint) WriteHeaderIncludedPacket(r *stack.Route, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	// The packet already has an IP header, but there are a few required checks.
 	h, ok := pkt.Data().PullUp(header.IPv6MinimumSize)
 	if !ok {
@@ -1025,6 +1041,7 @@ func (e *endpoint) forwardPacket(pkt *stack.PacketBuffer) ip.ForwardingError {
 	// WriteHeaderIncludedPacket takes ownership of the packet buffer, but we do
 	// not own it.
 	newPkt := pkt.DeepCopyForForwarding(int(r.MaxHeaderLength()))
+	defer newPkt.DecRef()
 	newHdr := header.IPv6(newPkt.NetworkHeader().View())
 
 	// As per RFC 8200 section 3,
@@ -1057,6 +1074,9 @@ func (e *endpoint) forwardPacket(pkt *stack.PacketBuffer) ip.ForwardingError {
 // HandlePacket is called by the link layer when new ipv6 packets arrive for
 // this endpoint.
 func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	stats := e.stats.ip
 
 	stats.PacketsReceived.Increment()
@@ -1118,6 +1138,7 @@ func (e *endpoint) handleLocalPacket(pkt *stack.PacketBuffer, canSkipRXChecksum 
 	stats.PacketsReceived.Increment()
 
 	pkt = pkt.CloneToInbound()
+	defer pkt.DecRef()
 	pkt.RXTransportChecksumValidated = canSkipRXChecksum
 
 	h, ok := e.protocol.parseAndValidate(pkt)

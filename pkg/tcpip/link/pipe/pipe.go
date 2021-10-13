@@ -59,14 +59,19 @@ func (e *Endpoint) deliverPackets(r stack.RouteInfo, proto tcpip.NetworkProtocol
 	// avoid a deadlock when a packet triggers a response which leads the stack to
 	// try and take a lock it already holds.
 	for pkt := pkts.Front(); pkt != nil; pkt = pkt.Next() {
-		e.linked.dispatcher.DeliverNetworkPacket(r.LocalLinkAddress /* remote */, r.RemoteLinkAddress /* local */, proto, stack.NewPacketBuffer(stack.PacketBufferOptions{
+		newPkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			Data: buffer.NewVectorisedView(pkt.Size(), pkt.Views()),
-		}))
+		})
+		e.linked.dispatcher.DeliverNetworkPacket(r.LocalLinkAddress /* remote */, r.RemoteLinkAddress /* local */, proto, newPkt)
+		newPkt.DecRef()
 	}
 }
 
 // WritePacket implements stack.LinkEndpoint.
 func (e *Endpoint) WritePacket(r stack.RouteInfo, proto tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	var pkts stack.PacketBufferList
 	pkts.PushBack(pkt)
 	e.deliverPackets(r, proto, pkts)
@@ -75,6 +80,9 @@ func (e *Endpoint) WritePacket(r stack.RouteInfo, proto tcpip.NetworkProtocolNum
 
 // WritePackets implements stack.LinkEndpoint.
 func (e *Endpoint) WritePackets(r stack.RouteInfo, pkts stack.PacketBufferList, proto tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	n := pkts.Len()
 	e.deliverPackets(r, proto, pkts)
 	return n, nil

@@ -104,6 +104,9 @@ type endpoint struct {
 
 // HandleLinkResolutionFailure implements stack.LinkResolvableNetworkEndpoint.
 func (e *endpoint) HandleLinkResolutionFailure(pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	// If we are operating as a router, return an ICMP error to the original
 	// packet's sender.
 	if pkt.NetworkPacketInfo.IsForwardedPacket {
@@ -119,6 +122,7 @@ func (e *endpoint) HandleLinkResolutionFailure(pkt *stack.PacketBuffer) {
 	pkt = stack.NewPacketBuffer(stack.PacketBufferOptions{
 		Data: buffer.NewVectorisedView(pkt.Size(), pkt.Views()),
 	})
+	defer pkt.DecRef()
 	pkt.NICID = e.nic.ID()
 	pkt.NetworkProtocolNumber = ProtocolNumber
 	// Use the same control type as an ICMPv4 destination host unreachable error
@@ -419,6 +423,8 @@ func (e *endpoint) handleFragments(_ *stack.Route, networkMTU uint32, pkt *stack
 
 // WritePacket writes a packet to the given destination address and protocol.
 func (e *endpoint) WritePacket(r *stack.Route, params stack.NetworkHeaderParams, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
 	if err := e.addIPHeader(r.LocalAddress(), r.RemoteAddress(), pkt, params, nil /* options */); err != nil {
 		return err
 	}
@@ -488,6 +494,8 @@ func (e *endpoint) writePacket(r *stack.Route, pkt *stack.PacketBuffer, headerIn
 			return &tcpip.ErrMessageTooLong{}
 		}
 		sent, remain, err := e.handleFragments(r, networkMTU, pkt, func(fragPkt *stack.PacketBuffer) tcpip.Error {
+			fragPkt.IncRef()
+			defer fragPkt.DecRef()
 			// TODO(gvisor.dev/issue/3884): Evaluate whether we want to send each
 			// fragment one by one using WritePacket() (current strategy) or if we
 			// want to create a PacketBufferList from the fragments and feed it to
@@ -509,6 +517,9 @@ func (e *endpoint) writePacket(r *stack.Route, pkt *stack.PacketBuffer, headerIn
 
 // WritePackets implements stack.NetworkEndpoint.
 func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, params stack.NetworkHeaderParams) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	if r.Loop()&stack.PacketLoop != 0 {
 		panic("multiple packets in local loop")
 	}
@@ -517,7 +528,6 @@ func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, par
 	}
 
 	stats := e.stats.ip
-
 	for pkt := pkts.Front(); pkt != nil; pkt = pkt.Next() {
 		if err := e.addIPHeader(r.LocalAddress(), r.RemoteAddress(), pkt, params, nil /* options */); err != nil {
 			return 0, err
@@ -534,6 +544,7 @@ func (e *endpoint) WritePackets(r *stack.Route, pkts stack.PacketBufferList, par
 			// removed once the fragmentation is done.
 			originalPkt := pkt
 			if _, _, err := e.handleFragments(r, networkMTU, pkt, func(fragPkt *stack.PacketBuffer) tcpip.Error {
+				fragPkt.IncRef()
 				// Modify the packet list in place with the new fragments.
 				pkts.InsertAfter(pkt, fragPkt)
 				pkt = fragPkt
@@ -755,6 +766,7 @@ func (e *endpoint) forwardPacket(pkt *stack.PacketBuffer) ip.ForwardingError {
 	// not own it.
 	newPkt := pkt.DeepCopyForForwarding(int(r.MaxHeaderLength()))
 	newHdr := header.IPv4(newPkt.NetworkHeader().View())
+	defer newPkt.DecRef()
 
 	// As per RFC 791 page 30, Time to Live,
 	//
@@ -798,6 +810,9 @@ func (e *endpoint) forwardPacket(pkt *stack.PacketBuffer) ip.ForwardingError {
 // HandlePacket is called by the link layer when new ipv4 packets arrive for
 // this endpoint.
 func (e *endpoint) HandlePacket(pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	stats := e.stats.ip
 
 	stats.PacketsReceived.Increment()
@@ -859,6 +874,7 @@ func (e *endpoint) handleLocalPacket(pkt *stack.PacketBuffer, canSkipRXChecksum 
 	stats.PacketsReceived.Increment()
 
 	pkt = pkt.CloneToInbound()
+	defer pkt.DecRef()
 	pkt.RXTransportChecksumValidated = canSkipRXChecksum
 
 	h, ok := e.protocol.parseAndValidate(pkt)

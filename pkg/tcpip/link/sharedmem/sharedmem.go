@@ -346,6 +346,9 @@ func (e *endpoint) writePacketLocked(r stack.RouteInfo, protocol tcpip.NetworkPr
 func (e *endpoint) WritePacket(_ stack.RouteInfo, _ tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if err := e.writePacketLocked(pkt.EgressRoute, pkt.NetworkProtocolNumber, pkt); err != nil {
 		return err
 	}
@@ -359,6 +362,9 @@ func (e *endpoint) WritePackets(_ stack.RouteInfo, pkts stack.PacketBufferList, 
 	var err tcpip.Error
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	for pkt := pkts.Front(); pkt != nil; pkt = pkt.Next() {
 		if err = e.writePacketLocked(pkt.EgressRoute, pkt.NetworkProtocolNumber, pkt); err != nil {
 			break
@@ -413,6 +419,7 @@ func (e *endpoint) dispatchLoop(d stack.NetworkDispatcher) {
 		pkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 			Data: buffer.View(b).ToVectorisedView(),
 		})
+		defer pkt.DecRef()
 
 		var src, dst tcpip.LinkAddress
 		var proto tcpip.NetworkProtocolNumber

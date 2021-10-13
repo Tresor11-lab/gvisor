@@ -410,6 +410,9 @@ func (ep *endpoint) GetSockOptInt(opt tcpip.SockOptInt) (int, tcpip.Error) {
 
 // HandlePacket implements stack.PacketEndpoint.HandlePacket.
 func (ep *endpoint) HandlePacket(nicID tcpip.NICID, _ tcpip.LinkAddress, netProto tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	ep.rcvMu.Lock()
 
 	// Drop the packet if our buffer is currently full.

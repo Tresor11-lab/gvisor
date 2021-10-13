@@ -511,6 +511,9 @@ func (*endpoint) WriteRawPacket(*stack.PacketBuffer) tcpip.Error { return &tcpip
 // WritePacket writes outbound packets to the file descriptor. If it is not
 // currently writable, the packet is dropped.
 func (e *endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if e.hdrSize > 0 {
 		e.AddHeader(r.LocalLinkAddress, r.RemoteLinkAddress, protocol, pkt)
 	}
@@ -673,6 +676,9 @@ func (e *endpoint) WritePackets(_ stack.RouteInfo, pkts stack.PacketBufferList, 
 	// batchSz is 47 because when SWGSO is in use then a single 65KB TCP
 	// segment can get split into 46 segments of 1420 bytes and a single 216
 	// byte segment.
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	const batchSz = 47
 	batch := make([]*stack.PacketBuffer, 0, batchSz)
 	batchFD := -1

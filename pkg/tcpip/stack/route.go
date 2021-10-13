@@ -455,6 +455,9 @@ func (r *Route) isValidForOutgoingRLocked() bool {
 
 // WritePacket writes the packet through the given route.
 func (r *Route) WritePacket(params NetworkHeaderParams, pkt *PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	if !r.isValidForOutgoing() {
 		return &tcpip.ErrInvalidEndpointState{}
 	}
@@ -465,6 +468,9 @@ func (r *Route) WritePacket(params NetworkHeaderParams, pkt *PacketBuffer) tcpip
 // WritePackets writes a list of n packets through the given route and returns
 // the number of packets written.
 func (r *Route) WritePackets(pkts PacketBufferList, params NetworkHeaderParams) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	if !r.isValidForOutgoing() {
 		return 0, &tcpip.ErrInvalidEndpointState{}
 	}

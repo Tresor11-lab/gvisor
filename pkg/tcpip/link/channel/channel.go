@@ -81,6 +81,8 @@ func (q *queue) ReadContext(ctx context.Context) (PacketInfo, bool) {
 }
 
 func (q *queue) Write(p PacketInfo) bool {
+	// q holds the PacketBuffer.
+	p.Pkt.PreserveObject()
 	wrote := false
 	select {
 	case q.c <- p:
@@ -240,6 +242,9 @@ func (e *Endpoint) LinkAddress() tcpip.LinkAddress {
 
 // WritePacket stores outbound packets into the channel.
 func (e *Endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	p := PacketInfo{
 		Pkt:   pkt,
 		Proto: protocol,
@@ -256,6 +261,9 @@ func (e *Endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocol
 
 // WritePackets stores outbound packets into the channel.
 func (e *Endpoint) WritePackets(r stack.RouteInfo, pkts stack.PacketBufferList, protocol tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	n := 0
 	for pkt := pkts.Front(); pkt != nil; pkt = pkt.Next() {
 		p := PacketInfo{
@@ -298,6 +306,9 @@ func (*Endpoint) AddHeader(tcpip.LinkAddress, tcpip.LinkAddress, tcpip.NetworkPr
 
 // WriteRawPacket implements stack.LinkEndpoint.
 func (e *Endpoint) WriteRawPacket(pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	p := PacketInfo{
 		Pkt:   pkt,
 		Proto: pkt.NetworkProtocolNumber,

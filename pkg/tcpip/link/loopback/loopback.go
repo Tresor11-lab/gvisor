@@ -77,6 +77,9 @@ func (*endpoint) Wait() {}
 // WritePacket implements stack.LinkEndpoint.WritePacket. It delivers outbound
 // packets to the network-layer dispatcher.
 func (e *endpoint) WritePacket(_ stack.RouteInfo, _ tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	return e.WriteRawPacket(pkt)
 }
 
@@ -95,6 +98,8 @@ func (e *endpoint) AddHeader(local, remote tcpip.LinkAddress, protocol tcpip.Net
 
 // WriteRawPacket implements stack.LinkEndpoint.
 func (e *endpoint) WriteRawPacket(pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
 	// Construct data as the unparsed portion for the loopback packet.
 	data := buffer.NewVectorisedView(pkt.Size(), pkt.Views())
 
@@ -104,6 +109,7 @@ func (e *endpoint) WriteRawPacket(pkt *stack.PacketBuffer) tcpip.Error {
 	newPkt := stack.NewPacketBuffer(stack.PacketBufferOptions{
 		Data: data,
 	})
+	defer newPkt.DecRef()
 	e.dispatcher.DeliverNetworkPacket("" /* remote */, "" /* local */, pkt.NetworkProtocolNumber, newPkt)
 
 	return nil

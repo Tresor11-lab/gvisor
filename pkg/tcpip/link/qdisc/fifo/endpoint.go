@@ -87,24 +87,27 @@ func (q *queueDispatcher) dispatchLoop() {
 		if ok && id == closeWakerID {
 			return
 		}
-		for pkt := q.q.dequeue(); pkt != nil; pkt = q.q.dequeue() {
-			batch.PushBack(pkt)
-			if batch.Len() < batchSize && !q.q.empty() {
-				continue
+		func() {
+			for pkt := q.q.dequeue(); pkt != nil; pkt = q.q.dequeue() {
+				batch.PushBack(pkt)
+				if batch.Len() < batchSize && !q.q.empty() {
+					continue
+				}
+				// We pass a protocol of zero here because each packet carries its
+				// NetworkProtocol.
+				q.lower.WritePackets(stack.RouteInfo{}, batch, 0 /* protocol */)
+				batch.DecRef()
+				batch.Reset()
 			}
-			// We pass a protocol of zero here because each packet carries its
-			// NetworkProtocol.
-			q.lower.WritePackets(stack.RouteInfo{}, batch, 0 /* protocol */)
-			for pkt := batch.Front(); pkt != nil; pkt = pkt.Next() {
-				batch.Remove(pkt)
-			}
-			batch.Reset()
-		}
+		}()
 	}
 }
 
 // DeliverNetworkPacket implements stack.NetworkDispatcher.DeliverNetworkPacket.
 func (e *endpoint) DeliverNetworkPacket(remote, local tcpip.LinkAddress, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	e.dispatcher.DeliverNetworkPacket(remote, local, protocol, pkt)
 }
 
@@ -169,6 +172,9 @@ func (e *endpoint) SupportedGSO() stack.SupportedGSO {
 //  - pkt.GSOOptions
 //  - pkt.NetworkProtocolNumber
 func (e *endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	d := e.dispatchers[int(pkt.Hash)%len(e.dispatchers)]
 	if !d.q.enqueue(pkt) {
 		return &tcpip.ErrNoBufferSpace{}
@@ -185,6 +191,9 @@ func (e *endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocol
 //  - pkt.GSOOptions
 //  - pkt.NetworkProtocolNumber
 func (e *endpoint) WritePackets(r stack.RouteInfo, pkts stack.PacketBufferList, protocol tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	enqueued := 0
 	for pkt := pkts.Front(); pkt != nil; {
 		d := e.dispatchers[int(pkt.Hash)%len(e.dispatchers)]
@@ -226,5 +235,8 @@ func (e *endpoint) AddHeader(local, remote tcpip.LinkAddress, protocol tcpip.Net
 
 // WriteRawPacket implements stack.LinkEndpoint.
 func (e *endpoint) WriteRawPacket(pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	return e.lower.WriteRawPacket(pkt)
 }

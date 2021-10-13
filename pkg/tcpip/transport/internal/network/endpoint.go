@@ -239,6 +239,8 @@ func (c *WriteContext) PacketInfo() WritePacketInfo {
 
 // WritePacket attempts to write the packet.
 func (c *WriteContext) WritePacket(pkt *stack.PacketBuffer, headerIncluded bool) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
 	pkt.Owner = c.owner
 
 	if headerIncluded {

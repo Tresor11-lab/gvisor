@@ -165,6 +165,9 @@ func (e *endpoint) dumpPacket(dir direction, protocol tcpip.NetworkProtocolNumbe
 // higher-level protocols to write packets; it just logs the packet and
 // forwards the request to the lower endpoint.
 func (e *endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocolNumber, pkt *stack.PacketBuffer) tcpip.Error {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	e.dumpPacket(directionSend, protocol, pkt)
 	return e.Endpoint.WritePacket(r, protocol, pkt)
 }
@@ -173,6 +176,9 @@ func (e *endpoint) WritePacket(r stack.RouteInfo, protocol tcpip.NetworkProtocol
 // higher-level protocols to write packets; it just logs the packet and
 // forwards the request to the lower endpoint.
 func (e *endpoint) WritePackets(r stack.RouteInfo, pkts stack.PacketBufferList, protocol tcpip.NetworkProtocolNumber) (int, tcpip.Error) {
+	pkts.IncRef()
+	defer pkts.DecRef()
+
 	for pkt := pkts.Front(); pkt != nil; pkt = pkt.Next() {
 		e.dumpPacket(directionSend, protocol, pkt)
 	}
@@ -209,6 +215,7 @@ func logPacket(prefix string, dir direction, protocol tcpip.NetworkProtocolNumbe
 	vv := buffer.NewVectorisedView(pkt.Size(), pkt.Views())
 	vv.TrimFront(len(pkt.LinkHeader().View()))
 	pkt = stack.NewPacketBuffer(stack.PacketBufferOptions{Data: vv})
+	defer pkt.DecRef()
 	switch protocol {
 	case header.IPv4ProtocolNumber:
 		if ok := parse.IPv4(pkt); !ok {

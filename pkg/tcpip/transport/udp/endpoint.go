@@ -440,6 +440,7 @@ func (e *endpoint) write(p tcpip.Payloader, opts tcpip.WriteOptions) (int64, tcp
 		ReserveHeaderBytes: header.UDPMinimumSize + int(pktInfo.MaxHeaderLength),
 		Data:               udpInfo.data.ToVectorisedView(),
 	})
+	defer pkt.DecRef()
 
 	// Initialize the UDP header.
 	udp := header.UDP(pkt.TransportHeader().Push(header.UDPMinimumSize))
@@ -866,6 +867,9 @@ func verifyChecksum(hdr header.UDP, pkt *stack.PacketBuffer) bool {
 // HandlePacket is called by the stack when new packets arrive to this transport
 // endpoint.
 func (e *endpoint) HandlePacket(id stack.TransportEndpointID, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	// Get the header then trim it from the view.
 	hdr := header.UDP(pkt.TransportHeader().View())
 	if int(hdr.Length()) > pkt.Data().Size()+header.UDPMinimumSize {
@@ -986,6 +990,9 @@ func (e *endpoint) onICMPError(err tcpip.Error, transErr stack.TransportError, p
 
 // HandleError implements stack.TransportEndpoint.
 func (e *endpoint) HandleError(transErr stack.TransportError, pkt *stack.PacketBuffer) {
+	pkt.IncRef()
+	defer pkt.DecRef()
+
 	// TODO(gvisor.dev/issues/5270): Handle all transport errors.
 	switch transErr.Kind() {
 	case stack.DestinationPortUnreachableTransportError:
